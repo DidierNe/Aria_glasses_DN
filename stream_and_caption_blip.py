@@ -10,7 +10,8 @@ import sys
 
 # === Load BLIP ===
 print("Loading BLIP model...")
-processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
+processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base",
+                                          use_fast=True)
 model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
 print("BLIP loaded.")
 
@@ -119,6 +120,7 @@ try:
     while True:
         if observer.last_image is not None:
             frame = observer.last_image.copy()
+            frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
             # Draw caption on image
             cv2.putText(
                 frame,

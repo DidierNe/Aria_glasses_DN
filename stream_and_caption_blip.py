@@ -7,13 +7,17 @@ import aria.sdk as aria
 from projectaria_tools.core.sensor_data import ImageDataRecord
 import argparse
 import sys
-
+import torch
 # === Load BLIP ===
 print("Loading BLIP model...")
 processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base",
                                           use_fast=True)
 model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
 print("BLIP loaded.")
+
+
+torch_device = torch.device("mps" if torch.backends.mps.is_available() else "cpu") # accelerate for apple sillicon
+model = model.to(torch_device)
 
 # === Observer class to receive frames ===
 class StreamingObserver:
@@ -40,8 +44,11 @@ class StreamingObserver:
         resized = cv2.resize(np_img, (384, 384)) #BLIP format , maybe check quality and algo of resize
         image = Image.fromarray(resized)
 ######QUESTION for rapidity do we need a RGB one or monochromatic could be as good and faster?
-        inputs = processor(images=image, return_tensors="pt") #preprocess image for model --->'pixel_values': tensor of shape (1, 3, 384, 384)
-        output = model.generate(**inputs) #generate a sequence of token IDs (numbers that map to words)
+        inputs = processor(images=image, return_tensors="pt")
+        inputs = {k: v.to(torch_device) for k, v in inputs.items()}
+ #preprocess image for model --->'pixel_values': tensor of shape (1, 3, 384, 384)
+        with torch.no_grad():  # ✅ Optional but recommended
+            output = model.generate(**inputs)   #generate a sequence of token IDs (numbers that map to words)
         return processor.decode(output[0], skip_special_tokens=True)
 # === Parse command line args ===
 parser = argparse.ArgumentParser()

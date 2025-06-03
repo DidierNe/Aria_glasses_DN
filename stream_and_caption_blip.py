@@ -8,6 +8,7 @@ from projectaria_tools.core.sensor_data import ImageDataRecord
 import argparse
 import sys
 import torch
+import requests
 # === Load BLIP ===
 print("Loading BLIP model...")
 processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base",
@@ -24,7 +25,7 @@ class StreamingObserver:
     def __init__(self):
         self.last_image = None
         self.last_caption_time = 0
-        self.cooldown = 3  # seconds
+        self.cooldown = 1  # seconds
         self.caption = "Waiting for image..."
 
     def on_image_received(self, image: np.ndarray, record: ImageDataRecord): # called from aria SDK aria.sdk.BaseStreamingClientObserver
@@ -39,17 +40,35 @@ class StreamingObserver:
             self.last_caption_time = now
             print("Caption from BLIP:", self.caption)
 
-    def generate_caption(self, np_img: np.ndarray) -> str: # return the caption
-        # Resize image for BLIP
-        resized = cv2.resize(np_img, (384, 384)) #BLIP format , maybe check quality and algo of resize
-        image = Image.fromarray(resized)
-######QUESTION for rapidity do we need a RGB one or monochromatic could be as good and faster?
-        inputs = processor(images=image, return_tensors="pt")
-        inputs = {k: v.to(torch_device) for k, v in inputs.items()}
- #preprocess image for model --->'pixel_values': tensor of shape (1, 3, 384, 384)
-        with torch.no_grad():  # ✅ Optional but recommended
-            output = model.generate(**inputs)   #generate a sequence of token IDs (numbers that map to words)
-        return processor.decode(output[0], skip_special_tokens=True)
+#     def generate_caption(self, np_img: np.ndarray) -> str: # return the caption
+#         # Resize image for BLIP
+#         resized = cv2.resize(np_img, (384, 384)) #BLIP format , maybe check quality and algo of resize
+#         image = Image.fromarray(resized)
+# ######QUESTION for rapidity do we need a RGB one or monochromatic could be as good and faster?
+#         inputs = processor(images=image, return_tensors="pt")
+#         inputs = {k: v.to(torch_device) for k, v in inputs.items()}
+#  #preprocess image for model --->'pixel_values': tensor of shape (1, 3, 384, 384)
+#         with torch.no_grad():  # ✅ Optional but recommended
+#             output = model.generate(**inputs)   #generate a sequence of token IDs (numbers that map to words)
+#         return processor.decode(output[0], skip_special_tokens=True)
+    
+
+
+#### trying to send and ask the server for the caption
+    def generate_caption(self, np_img: np.ndarray) -> str:
+        _, img_encoded = cv2.imencode('.jpg', np_img)
+        try:
+            response = requests.post(
+                "http://localhost:8000/caption",  # tunnel SSH actif
+                files={"image": ("image.jpg", img_encoded.tobytes(), "image/jpeg")},
+                timeout=5
+            )
+            if response.status_code == 200:
+                return response.json().get("caption", "No caption")
+            else:
+                return f"Error: {response.status_code}"
+        except Exception as e:
+            return f"Exception: {e}"
 # === Parse command line args ===
 parser = argparse.ArgumentParser()
 parser.add_argument(

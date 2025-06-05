@@ -1,3 +1,7 @@
+#This code must be run on your server account 
+#wait for the image, run the model on gpu and send the caption throught port 8000
+
+
 from flask import Flask, request, jsonify
 from PIL import Image
 import io
